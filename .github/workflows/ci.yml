@@ -7,6 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
+
+  # ----------------------- STAGE 1: BUILD -----------------------
   build:
     runs-on: ubuntu-latest
 
@@ -14,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Use Node.js 18.x
+      - name: Use Node 18
         uses: actions/setup-node@v4
         with:
           node-version: 18
@@ -29,22 +31,75 @@ jobs:
           cd frontend
           npm install --legacy-peer-deps
 
-      - name: Run backend tests
+  # ------------------- STAGE 2: TEST + COVERAGE -----------------
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install backend deps
         run: |
           cd backend
-          npm test
+          npm install --legacy-peer-deps
+
+      - name: Run Tests with Coverage
+        run: |
+          cd backend
+          npm run coverage
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage
+
+  # -------------------- STAGE 3: LINT + SECURITY ----------------
+  lint_security:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install backend deps
+        run: |
+          cd backend
+          npm install --legacy-peer-deps
 
       - name: Run ESLint
         run: |
           cd backend
-          npm run lint || true
+          npm run lint || true   # do not fail pipeline on warnings
 
       - name: Security audit
         run: |
           cd backend
           npm audit --audit-level=low || true
 
-      - name: Prepare deployment folder
+  # ------------------------ STAGE 4: PACKAGE ---------------------
+  package:
+    runs-on: ubuntu-latest
+    needs: lint_security
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare deployment
         run: |
           mkdir deployment
           cp -r backend deployment/backend
@@ -55,5 +110,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cache-project
+          name: final-artifact
           path: deployment-package.zip
